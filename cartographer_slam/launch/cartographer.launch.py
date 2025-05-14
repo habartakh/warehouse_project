@@ -1,12 +1,27 @@
 import os
+import launch
+
 from ament_index_python.packages import get_package_share_directory
 from launch_ros.actions import Node
 from launch import LaunchDescription
+from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
+    use_sim_time_arg =  launch.actions.DeclareLaunchArgument("use_sim_time", default_value="True")
+    use_sim_time_f = LaunchConfiguration('use_sim_time')
+
+    # Config file for the simulation
+    if use_sim_time_f == True:
+        configuration_basename = 'cartographer_sim.lua'
+    #For the real robot 
+    else:
+        configuration_basename = 'cartographer_real.lua'
+    
+    
+    
     cartographer_config_dir = os.path.join(get_package_share_directory('cartographer_slam'), 'config')
-    configuration_basename = 'cartographer_sim.lua'
+    
 
     rviz_config_dir = os.path.join(get_package_share_directory('cartographer_slam'), 'rviz', 'mapping.rviz')
 
@@ -40,6 +55,7 @@ def generate_launch_description():
 
 
     return LaunchDescription([
+        use_sim_time_arg,
         cartographer_node,
         cartographer_occupancy_grid_node,
         rviz_node,    
