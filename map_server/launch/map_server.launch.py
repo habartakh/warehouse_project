@@ -3,26 +3,25 @@ import launch
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+
 
 
 def generate_launch_description():
-    use_sim_time_arg =  launch.actions.DeclareLaunchArgument('use_sim_time', default_value='False')
-    use_sim_time_f = LaunchConfiguration('use_sim_time')
+    map_file_arg =  launch.actions.DeclareLaunchArgument('map_file', default_value='warehouse_map_sim.yaml')
+    map_file_f = LaunchConfiguration('map_file')
 
-    # For the simulation
-    if use_sim_time_f == 'true':
-        map_file_name = 'warehouse_map_sim.yaml'
-    #For the real robot 
-    elif use_sim_time_f == 'false':
-        map_file_name = 'warehouse_map_real'
     
-    map_file = os.path.join(get_package_share_directory('map_server'), 'config', map_file_name)
+    map_file = PathJoinSubstitution([
+        get_package_share_directory('map_server'),
+        'config',
+        map_file_f
+    ])
     rviz_config_dir = os.path.join(get_package_share_directory('cartographer_slam'), 'rviz', 'map_display.rviz')
 
 
     return LaunchDescription([
-        use_sim_time_arg,
+        map_file_arg,
         Node(
             package='rviz2',
             executable='rviz2',

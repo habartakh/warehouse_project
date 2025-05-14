@@ -5,20 +5,22 @@ from ament_index_python.packages import get_package_share_directory
 from launch_ros.actions import Node
 from launch import LaunchDescription
 from launch.substitutions import LaunchConfiguration
+from launch.substitutions import PythonExpression
+
 
 
 def generate_launch_description():
     use_sim_time_arg =  launch.actions.DeclareLaunchArgument("use_sim_time", default_value="True")
     use_sim_time_f = LaunchConfiguration('use_sim_time')
+    
+    # File names for config
+    configuration_sim = 'cartographer_sim.lua'
+    configuration_real = 'cartographer_real.lua'
 
-    # Config file for the simulation
-    if use_sim_time_f == True:
-        configuration_basename = 'cartographer_sim.lua'
-    #For the real robot 
-    else:
-        configuration_basename = 'cartographer_real.lua'
-    
-    
+    # Use a PythonExpression to dynamically choose the config basename
+    configuration_basename = PythonExpression([
+            '"', configuration_sim, '" if "', use_sim_time_f, '" == "True" else "', configuration_real, '"'
+        ])
     
     cartographer_config_dir = os.path.join(get_package_share_directory('cartographer_slam'), 'config')
     
