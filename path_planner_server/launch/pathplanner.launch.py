@@ -43,7 +43,11 @@ def generate_launch_description():
         os.path.join(get_package_share_directory(package_description), 'config', 'recoveries_real.yaml'), '"'
     ])
    
-
+    sim_topic_name = '/diffbot_base_controller/cmd_vel_unstamped'
+    real_topic_name = '/cmd_vel'
+    cmd_vel_topic_name = PythonExpression([
+            '"', sim_topic_name, '" if "', use_sim_time_f, '" == "True" else "', real_topic_name, '"'
+        ])
     # RVIZ Configuration
     rviz_config_dir = os.path.join(get_package_share_directory(package_description), 'rviz', 'pathplanning.rviz')
 
@@ -52,7 +56,7 @@ def generate_launch_description():
                 executable='rviz2',
                 output='screen',
                 name='rviz_node',
-                parameters=[{'use_sim_time': True}],
+                parameters=[{'use_sim_time': use_sim_time_f}],
                 arguments=['-d', rviz_config_dir])
 
 
@@ -61,7 +65,7 @@ def generate_launch_description():
                     executable='planner_server',
                     name='planner_server',
                     remappings=[
-                        ('/cmd_vel', '/diffbot_base_controller/cmd_vel_unstamped'),
+                        ('/cmd_vel', cmd_vel_topic_name),
                     ],
                     output='screen',
                     parameters=[planner_yaml])
@@ -71,7 +75,7 @@ def generate_launch_description():
                         executable='controller_server',
                         name='controller_server',
                         remappings=[
-                        ('/cmd_vel', '/diffbot_base_controller/cmd_vel_unstamped'),
+                        ('/cmd_vel', cmd_vel_topic_name),
                         ],
                         output='screen',
                         parameters=[controller_yaml])
@@ -81,7 +85,7 @@ def generate_launch_description():
                         executable='behavior_server',
                         name='recoveries_server',
                         remappings=[
-                        ('/cmd_vel', '/diffbot_base_controller/cmd_vel_unstamped'),
+                        ('/cmd_vel', cmd_vel_topic_name),
                         ],
                         parameters=[recovery_yaml],
                         output='screen')
@@ -91,7 +95,7 @@ def generate_launch_description():
                         executable='bt_navigator',
                         name='bt_navigator',
                         remappings=[
-                        ('/cmd_vel', '/diffbot_base_controller/cmd_vel_unstamped'),
+                        ('/cmd_vel', cmd_vel_topic_name),
                         ],
                         output='screen',
                         parameters=[bt_navigator_yaml])
