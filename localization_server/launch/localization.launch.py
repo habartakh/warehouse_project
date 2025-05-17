@@ -72,22 +72,10 @@ def generate_launch_description():
                 parameters=[{'use_sim_time': True}],
                 arguments=['-d', rviz_config_dir])
 
-    # Event handler to launch map_server after rviz2 starts
-    delayed_map_server = RegisterEventHandler(
-        OnProcessStart(
-            target_action=rviz_node,
-            on_start=[  
-                        map_server_node,
-                        amcl_node,
-                        lifecycle_manager_node,
-                      ]
-        )
-    )
 
     return LaunchDescription([
         map_file_arg,
         rviz_node,
-        # delayed_map_server,
         lifecycle_manager_node,
         map_server_node,
         amcl_node,
