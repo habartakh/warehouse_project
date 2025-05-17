@@ -1,6 +1,6 @@
 amcl:
   ros__parameters:
-    use_sim_time: True
+    use_sim_time: False
     alpha1: 0.2
     alpha2: 0.2
     alpha3: 0.2
@@ -14,12 +14,12 @@ amcl:
     global_frame_id: "map"
     lambda_short: 0.1
     laser_likelihood_max_dist: 2.0
-    laser_max_range: 20.0
-    laser_min_range: 0.05999999865889549
+    laser_max_range: 30.0
+    laser_min_range: 0.02
     laser_model_type: "likelihood_field"
     max_beams: 60
-    max_particles: 80000
-    min_particles: 4000
+    max_particles: 2500
+    min_particles: 250
     odom_frame_id: "robot_odom"
     pf_err: 0.05
     pf_z: 0.99
@@ -39,8 +39,7 @@ amcl:
     z_short: 0.05
     set_initial_pose: True
     initial_pose:
-        x: 0.668147
-        y: 0.034279
+        x: 0.78941
+        y: 0.0768434
         yaw: 0.000
-
 
