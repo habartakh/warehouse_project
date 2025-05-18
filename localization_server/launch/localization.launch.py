@@ -33,6 +33,10 @@ def generate_launch_description():
         os.path.join(get_package_share_directory(package_description), 'config', amcl_config_real), '"'
     ])
 
+    use_sim_time_value  = PythonExpression([
+            '"', "True", '" if "', map_file_f, '" == "warehouse_map_sim.yaml" else "', "False", '"'
+        ])
+
     # RVIZ Configuration
     rviz_config_dir = os.path.join(get_package_share_directory(package_description), 'rviz', 'amcl_rviz.rviz')
 
@@ -42,7 +46,7 @@ def generate_launch_description():
                         executable='map_server',
                         name='map_server',
                         output='screen',
-                        parameters=[{'use_sim_time': True},
+                        parameters=[{'use_sim_time': use_sim_time_value},
                                     {'yaml_filename':map_file}
                                 ]
                     )
@@ -60,7 +64,7 @@ def generate_launch_description():
                             executable='lifecycle_manager',
                             name='lifecycle_manager_mapper',
                             output='screen',
-                            parameters=[{'use_sim_time': True},
+                            parameters=[{'use_sim_time': use_sim_time_value},
                                         {'autostart': True},
                                         {'node_names': ['map_server','amcl']}]) 
 
@@ -69,7 +73,7 @@ def generate_launch_description():
                 executable='rviz2',
                 output='screen',
                 name='rviz_node',
-                parameters=[{'use_sim_time': True}],
+                parameters=[{'use_sim_time': use_sim_time_value}],
                 arguments=['-d', rviz_config_dir])
 
 

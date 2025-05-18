@@ -15,7 +15,7 @@ amcl:
     lambda_short: 0.1
     laser_likelihood_max_dist: 2.0
     laser_max_range: 30.0
-    laser_min_range: 0.02
+    laser_min_range: 0.12
     laser_model_type: "likelihood_field"
     max_beams: 60
     max_particles: 2500
@@ -39,7 +39,6 @@ amcl:
     z_short: 0.05
     set_initial_pose: True
     initial_pose:
-        x: 0.78941
-        y: 0.0768434
-        yaw: 0.000
-
+        x: -0.0131072
+        y: -0.0080387
+        yaw: 0.0
