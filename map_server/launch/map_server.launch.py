@@ -18,11 +18,12 @@ def generate_launch_description():
     ])
 
     #path to the RVIZ config file
-    rviz_config_dir = os.path.join(get_package_share_directory('cartographer_slam'), 'rviz', 'map_display.rviz')
+    rviz_config_dir = os.path.join(get_package_share_directory('map_server'), 'rviz', 'map_display.rviz')
 
 
     return LaunchDescription([
         map_file_arg,
+        
         Node(
             package='rviz2',
             executable='rviz2',
@@ -31,7 +32,14 @@ def generate_launch_description():
             parameters=[{'use_sim_time': True}],
             arguments=['-d', rviz_config_dir]),
 
-
+        Node(
+            package='nav2_lifecycle_manager',
+            executable='lifecycle_manager',
+            name='lifecycle_manager_mapper',
+            output='screen',
+            parameters=[{'use_sim_time': True},
+                        {'autostart': True},
+                        {'node_names': ['map_server']}]),
         Node(
             package='nav2_map_server',
             executable='map_server',
@@ -42,14 +50,7 @@ def generate_launch_description():
                        ]),
 
 
-        Node(
-            package='nav2_lifecycle_manager',
-            executable='lifecycle_manager',
-            name='lifecycle_manager_mapper',
-            output='screen',
-            parameters=[{'use_sim_time': True},
-                        {'autostart': True},
-                        {'node_names': ['map_server']}]),
+        
 
                 
         ])
