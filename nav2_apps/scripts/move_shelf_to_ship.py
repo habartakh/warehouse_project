@@ -7,15 +7,25 @@ from copy import deepcopy
 from geometry_msgs.msg import PoseStamped
 from rclpy.duration import Duration
 import rclpy
+from rclpy.node import Node
+
 
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
 
+from approach_cart_service_server.srv import GoToLoading
 
-class SimpleCommander:
+
+class SimpleCommander(Node):
     def __init__(self) :
+        super().__init__('simple_commander')
         self.navigator = BasicNavigator()
         self.initial_pose = PoseStamped()
         self.loading_pose = PoseStamped()
+
+        # client attributes to call the service /approach-shelf
+        self.cli = self.create_client(GoToLoading, '/approach_shelf')
+        self.req = GoToLoading.Request()
+
         
     def control_loop(self):
         self.set_initial_pose()
@@ -25,6 +35,10 @@ class SimpleCommander:
 
         # Then gor to the loading position
         self.go_to_loading_position()
+
+        # After placing the robot in the loading position,
+        # Move it under the shelf and lift the shelf
+        self.go_under_shelf()
 
     
     # Set the robot initial pose
@@ -74,8 +88,24 @@ class SimpleCommander:
             print('Task failed!')
             exit(-1)
 
-    def go_under_shelf():
-        pass
+    # To go under the shelf and load it,
+    #  we will call a service made in a previous project:
+    # https://github.com/habartakh/checkpoint9/blob/main/attach_shelf/src/approach_service_server.cpp
+    def go_under_shelf(self):
+        while not self.cli.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Service not available, waiting...')
+
+        self.req.attach_to_shelf = True  # Initiate the robot movement towards the shelf
+        future = self.cli.call_async(self.req)
+        rclpy.spin_until_future_complete(self, future)
+
+        result = future.result()
+        if (result.complete):
+            print("Successfully lifted the shelf!")
+        else : 
+            print("Could not load the shelf...")
+            exit(-1)
+
 
     def go_to_shipping_position():
         pass
