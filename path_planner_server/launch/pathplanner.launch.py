@@ -42,6 +42,12 @@ def generate_launch_description():
         '" if "', use_sim_time_f, '" == "True" else "', 
         os.path.join(get_package_share_directory(package_description), 'config', 'recoveries_real.yaml'), '"'
     ])
+
+    filters_yaml = PythonExpression([
+        '"', os.path.join(get_package_share_directory(package_description), 'config', 'filters_sim.yaml'), 
+        '" if "', use_sim_time_f, '" == "True" else "', 
+        os.path.join(get_package_share_directory(package_description), 'config', 'filters_real.yaml'), '"'
+    ])
    
     sim_topic_name = '/diffbot_base_controller/cmd_vel_unstamped'
     real_topic_name = '/cmd_vel'
@@ -99,6 +105,22 @@ def generate_launch_description():
                         ],
                         output='screen',
                         parameters=[bt_navigator_yaml])
+
+    filter_mask_server_node = Node(
+                        package='nav2_map_server',
+                        executable='map_server',
+                        name='filter_mask_server',
+                        output='screen',
+                        emulate_tty=True,
+                        parameters=[filters_yaml])
+
+    costmap_filter_info_node = Node(
+                        package='nav2_map_server',
+                        executable='costmap_filter_info_server',
+                        name='costmap_filter_info_server',
+                        output='screen',
+                        emulate_tty=True,
+                        parameters=[filters_yaml])
     
     lifecycle_manager_pathplanner = Node(
                                         package='nav2_lifecycle_manager',
@@ -110,7 +132,9 @@ def generate_launch_description():
                                                                     'controller_server',
                                                                     'planner_server',
                                                                     'recoveries_server',
-                                                                    'bt_navigator']}])
+                                                                    'bt_navigator',
+                                                                    'filter_mask_server',
+                                                                    'costmap_filter_info_server']}])
    
     return LaunchDescription([ 
         use_sim_time_arg,
@@ -120,4 +144,6 @@ def generate_launch_description():
         controller_server, 
         recoveries_server,
         bt_navigator,
+        filter_mask_server_node,
+        costmap_filter_info_node,
     ])
