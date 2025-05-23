@@ -4,9 +4,9 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch.actions import RegisterEventHandler
-from launch.event_handlers import OnProcessStart
 from launch.substitutions import PythonExpression
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 def generate_launch_description():
     # Name of the current package
@@ -29,12 +29,12 @@ def generate_launch_description():
    # Use PythonExpression to choose the full YAML path
     nav2_yaml = PythonExpression([
         '"', os.path.join(get_package_share_directory(package_description), 'config', amcl_config_sim), 
-        '" if "', map_file_f, '" == "warehouse_map_sim.yaml" else "', 
+        '" if "', map_file_f, '" == "warehouse_map_keepout_sim.yaml" else "', 
         os.path.join(get_package_share_directory(package_description), 'config', amcl_config_real), '"'
     ])
 
     use_sim_time_value  = PythonExpression([
-            '"', "True", '" if "', map_file_f, '" == "warehouse_map_sim.yaml" else "', "False", '"'
+            '"', "True", '" if "', map_file_f, '" == "warehouse_map_keepout_sim.yaml" else "', "False", '"'
         ])
 
     # RVIZ Configuration
@@ -76,12 +76,21 @@ def generate_launch_description():
                 parameters=[{'use_sim_time': use_sim_time_value}],
                 arguments=['-d', rviz_config_dir])
 
+    # Start the service server to make the robot go under the shelf and attach it 
+    service_server_pkg = get_package_share_directory('approach_cart_service_server')
+    approach_cart_service_server_node = IncludeLaunchDescription(
+                        PythonLaunchDescriptionSource(
+                            os.path.join(service_server_pkg, 'launch', 'start_approach_service_server.launch.py'),
+                        )
+                    )
+
+
 
     return LaunchDescription([
         map_file_arg,
-        rviz_node,
+        approach_cart_service_server_node,
+        # rviz_node,
         lifecycle_manager_node,
         map_server_node,
-        amcl_node,
-              
+        amcl_node,       
         ])
