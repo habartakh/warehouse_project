@@ -5,10 +5,14 @@ import time
 from copy import deepcopy
 from enum import Enum
 
-from geometry_msgs.msg import PoseStamped, Polygon, Point32
+from geometry_msgs.msg import PoseStamped, Polygon, Point32, Twist
+from std_msgs.msg import String
 from rclpy.duration import Duration
 import rclpy
 from rclpy.node import Node
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
+from rclpy.executors import SingleThreadedExecutor, MultiThreadedExecutor
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
 
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
@@ -32,27 +36,38 @@ class SimpleCommander(Node):
         self.loading_pose = PoseStamped()
         self.shipping_pose = PoseStamped()
 
+        # Timer for the control loop
+        self.mutually_exclusive_group_1 = MutuallyExclusiveCallbackGroup() 
+        self.control_timer = self.create_timer(0.5, self.control_loop,callback_group=self.mutually_exclusive_group_1)
+
         # client attributes to call the service /approach-shelf
         self.cli = self.create_client(GoToLoading, '/approach_shelf')
         self.req = GoToLoading.Request()
         self.sent_request = False 
 
         # robot footprint
+        self.mutually_exclusive_group_2 = MutuallyExclusiveCallbackGroup() 
         self.robot_footprint = Polygon()
         self.publisher_local = self.create_publisher(Polygon, '/local_costmap/footprint', 10)
         self.publisher_global = self.create_publisher(Polygon, '/global_costmap/footprint', 10)
-        self.timer = self.create_timer(1.0, self.update_robot_footprint)
-        # self.timer.cancel()
+        self.update_footprint_timer = self.create_timer(1.0, self.update_robot_footprint, callback_group= self.mutually_exclusive_group_2)
         self.update_is_true = False
 
         # Robot Actual state during the shiping position 
         self.robot_state = State.UNINITIALIZED
 
-        # Timer for the control loop 
-        self.control_timer = self.create_timer(0.5, self.control_loop)
-
         # Velocity commands publisher
+        self.vel_cmd_publisher = self.create_publisher(Twist, '/diffbot_base_controller/cmd_vel_unstamped', 10)
+        self.reverse = False
 
+        # publisher to unload the shelf with a compatible QoS profile
+        my_qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+        self.unload_publisher = self.create_publisher(String, '/elevator_down', qos_profile=my_qos_profile)
 
         
     def control_loop(self):
@@ -72,19 +87,25 @@ class SimpleCommander(Node):
                 # only send ONE request 
                 if self.sent_request == False :  
                     # After placing the robot in the loading position,
-                    # Move it under the shelf and lift the shelf
+                    # Move it under the shelf and lift the shelf,
+                    # Then update the robot footprint
                     self.go_under_shelf()
                 
             case State.GO_SHIPPING : 
-                print('Inside State GO_SHIPPING')
-                # Then update the robot footprint since it is carrying the shelf now
-                # self.timer.reset()
-                
-                #self.go_to_shipping_position()
-                
+                self.update_is_true = True
 
+                if not self.reverse : 
+                    # First, take a step back from the obstacles 
+                    self.back_up()
+                
+                #Then go to the shipping position
+                self.go_to_shipping_position()
+                
+            case State.RETURN_INIT_POS:
+                self.navigator.goToPose(self.initial_pose)
+            
             case _ : 
-                pass
+                print("Finished the mission!")
 
 
     
@@ -179,10 +200,10 @@ class SimpleCommander(Node):
             Point32(x=-0.3, y=0.3, z=0.00)]
         
         robot_shelf_footprint = [
-            Point32(x=0.5, y=0.5, z=0.00),
-            Point32(x=0.5, y=-0.5, z=0.00),
-            Point32(x=-0.5, y=-0.5, z=0.00),
-            Point32(x=-0.5, y=0.5, z=0.00)]
+            Point32(x=0.45, y=0.45, z=0.00),
+            Point32(x=0.45, y=-0.45, z=0.00),
+            Point32(x=-0.45, y=-0.45, z=0.00),
+            Point32(x=-0.45, y=0.45, z=0.00)]
 
         self.robot_footprint.points = robot_shelf_footprint if self.update_is_true else robot_only_ft
         self.publisher_local.publish(self.robot_footprint)
@@ -190,21 +211,47 @@ class SimpleCommander(Node):
 
         self.get_logger().info("Updated the robot footprint")
 
+    # After lifting the shelf, back up the robot a little
+    # sincs the new footprint is larger and overlaps with some of the warehouse detected obstacles
+    # Thus, the navigation system won't be able to plan a suitable path to the shipping position
+    def back_up(self):
+        cmd_vel_msg = Twist()
+        cmd_vel_msg.angular.z = 0.0 
+        cmd_vel_msg.linear.x = -0.2 
 
+        self.get_logger().info('Sending move command for 2 seconds...')
+        
+        for _ in range(80):
+            self.vel_cmd_publisher.publish(cmd_vel_msg)
+            time.sleep(0.1)  # Wait 2 seconds
+
+        cmd_vel_msg.linear.x = 0.0       
+        
+        self.get_logger().info('Sending stop command ...')
+        self.vel_cmd_publisher.publish(cmd_vel_msg)
+        time.sleep(1.0)
+
+        self.reverse = True
+
+    def unload_shelf(self):
+        unload_msg = String()
+        unload_msg.data = ""
+        self.unload_publisher.publish(unload_msg)
+        self.get_logger().info('Unloaded the shelf')
     
     def go_to_shipping_position(self):
         '''
-        shipping pose : Frame:map, Position(2.51228, 1.1686, 0), 
-        Orientation(0, 0, 0.701893, 0.712283) = Angle: 1.5561
+        shipping pose : Frame:map, Position(2.46773, 1.31008, 0), 
+        Orientation(0, 0, 0.6427863067989583, 0.7660455363695786) = Angle: 1.68959
         '''
         # set the coordinates of the shipping location
         self.shipping_pose.header.frame_id = 'map'
         self.shipping_pose.header.stamp = self.navigator.get_clock().now().to_msg()
         # Coordinates obtained via RVIZ
-        self.shipping_pose.pose.position.x = 2.51228
-        self.shipping_pose.pose.position.y = 1.1686
-        self.shipping_pose.pose.orientation.z = 0.701893
-        self.shipping_pose.pose.orientation.w = 0.712283
+        self.shipping_pose.pose.position.x = 2.46773
+        self.shipping_pose.pose.position.y = 1.31008
+        self.shipping_pose.pose.orientation.z = 0.6427863067989583
+        self.shipping_pose.pose.orientation.w = 0.7660455363695786
         self.get_logger().info('Received request to go to the shipping position.')
         self.navigator.goToPose(self.shipping_pose)
 
@@ -222,9 +269,12 @@ class SimpleCommander(Node):
         result = self.navigator.getResult()
         if result == TaskResult.SUCCEEDED:
             self.get_logger().info('Arrived to the shipping position!')
+            self.unload_shelf() # Unload the shelf
+            self.update_is_true = False # Then reset the robot footprint
+            self.robot_state = State.RETURN_INIT_POS
             
         elif result == TaskResult.CANCELED:
-            self.get_logger().info('Task at  was canceled. Returning to starting point...')
+            self.get_logger().info('Shipping Task was canceled. Returning to starting point...')
             self.initial_pose.header.stamp = self.navigator.get_clock().now().to_msg()
             self.navigator.goToPose(self.initial_pose)
 
@@ -238,7 +288,11 @@ def main():
     rclpy.init()
 
     simple_commander = SimpleCommander()
-    rclpy.spin(simple_commander)
+
+    # Use a MultiThreadedExecutor to enable parallel execution
+    executor = MultiThreadedExecutor()
+    executor.add_node(simple_commander)
+    executor.spin()
 
     rclpy.shutdown()
     
