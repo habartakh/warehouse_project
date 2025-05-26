@@ -104,10 +104,13 @@ class SimpleCommander(Node):
                 self.go_to_shipping_position()
                 
             case State.RETURN_INIT_POS:
+                 
+                # Go back to your initial position
                 self.navigator.goToPose(self.initial_pose)
-            
+                # print("Finished the mission!") 
+
             case _ : 
-                print("Finished the mission!")
+               print ("Default case") 
 
 
     
@@ -252,7 +255,7 @@ class SimpleCommander(Node):
         time.sleep(1.0)
 
         self.reverse = True
-        self.control_timer.reset()
+        # self.control_timer.reset()
 
     def unload_shelf(self):
         unload_msg = String()
@@ -263,16 +266,16 @@ class SimpleCommander(Node):
     def go_to_shipping_position(self):
         '''
         shipping pose : Frame:map, Position(2.46773, 1.31008, 0), 
-        Orientation(0, 0, 0.6427863067989583, 0.7660455363695786) = Angle: 1.68959
+        Orientation(0, 0, 0.5630981094458154, 0.8263900526619065) = Angle: 1.18959
         '''
         # set the coordinates of the shipping location
         self.shipping_pose.header.frame_id = 'map'
         self.shipping_pose.header.stamp = self.navigator.get_clock().now().to_msg()
         # Coordinates obtained via RVIZ
         self.shipping_pose.pose.position.x = 2.46773
-        self.shipping_pose.pose.position.y = 1.31008
-        self.shipping_pose.pose.orientation.z = 0.6427863067989583
-        self.shipping_pose.pose.orientation.w = 0.7660455363695786
+        self.shipping_pose.pose.position.y = 1.41008
+        self.shipping_pose.pose.orientation.z = 0.5630981094458154
+        self.shipping_pose.pose.orientation.w = 0.8263900526619065
         self.get_logger().info('Received request to go to the shipping position.')
         self.navigator.goToPose(self.shipping_pose)
 
@@ -292,6 +295,7 @@ class SimpleCommander(Node):
             self.get_logger().info('Arrived to the shipping position!')
             self.unload_shelf() # Unload the shelf
             self.update_is_true = False # Then reset the robot footprint
+            self.back_up()
             self.robot_state = State.RETURN_INIT_POS
             
         elif result == TaskResult.CANCELED:
@@ -318,8 +322,6 @@ def main():
 
     rclpy.shutdown()
     
-    # exit(0)
-
 
 if __name__ == '__main__':
     main()
