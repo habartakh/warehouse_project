@@ -255,6 +255,7 @@ class SimpleCommander(Node):
         time.sleep(1.0)
 
         self.reverse = True
+
         # self.control_timer.reset()
 
     def unload_shelf(self):
