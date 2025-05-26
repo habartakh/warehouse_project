@@ -27,7 +27,6 @@ class State(Enum):
     RETURN_INIT_POS = 5
 
 
-
 class SimpleCommander(Node):
     def __init__(self) :
         super().__init__('simple_commander')
@@ -37,10 +36,12 @@ class SimpleCommander(Node):
         self.shipping_pose = PoseStamped()
 
         # Timer for the control loop
-        self.mutually_exclusive_group_1 = MutuallyExclusiveCallbackGroup() 
-        self.control_timer = self.create_timer(0.5, self.control_loop,callback_group=self.mutually_exclusive_group_1)
+        self.control_ran_once = False
+        self.reentrant_group = ReentrantCallbackGroup() 
+        self.control_timer = self.create_timer(2.0, self.control_loop,callback_group=self.reentrant_group)
 
         # client attributes to call the service /approach-shelf
+        self.service_callback_group = ReentrantCallbackGroup()
         self.cli = self.create_client(GoToLoading, '/approach_shelf')
         self.req = GoToLoading.Request()
         self.sent_request = False 
@@ -69,27 +70,28 @@ class SimpleCommander(Node):
         )
         self.unload_publisher = self.create_publisher(String, '/elevator_down', qos_profile=my_qos_profile)
 
+        # Wait for navigation to activate fully
+        self.navigator.waitUntilNav2Active()
+
         
     def control_loop(self):
+        self.control_timer.cancel()
         
         match self.robot_state : 
             case State.UNINITIALIZED:
                 self.set_initial_pose()
             
             case State.GO_LOADING :    
-                # Wait for navigation to activate fully
-                self.navigator.waitUntilNav2Active()
-
-                # Then go to the loading position
+                # Go to the loading position
                 self.go_to_loading_position()
 
             case State.GO_ATTACH_SHELF:
                 # only send ONE request 
-                if self.sent_request == False :  
+                #if self.sent_request == False :  
                     # After placing the robot in the loading position,
                     # Move it under the shelf and lift the shelf,
                     # Then update the robot footprint
-                    self.go_under_shelf()
+                self.go_under_shelf()
                 
             case State.GO_SHIPPING : 
                 self.update_is_true = True
@@ -120,6 +122,7 @@ class SimpleCommander(Node):
         self.navigator.setInitialPose(self.initial_pose)
 
         self.robot_state = State.GO_LOADING
+        self.control_timer.reset()
 
     # z = -0.7660446835233129 w = 0.6427873231837007 -> 100 degrees
     # z = -0.706825181105366 w = 0.7073882691671998 -> 90 degrees
@@ -141,7 +144,7 @@ class SimpleCommander(Node):
         while not self.navigator.isTaskComplete():
             i = i + 1
             feedback = self.navigator.getFeedback()
-            if feedback and i % 5 == 0:
+            if feedback and i % 15 == 0:
                 print('Estimated time of arrival at loading position: ' + '{0:.0f}'.format(
                         Duration.from_msg(feedback.estimated_time_remaining).nanoseconds / 1e9)
                     + ' seconds.')
@@ -151,6 +154,7 @@ class SimpleCommander(Node):
         if result == TaskResult.SUCCEEDED:
             self.get_logger().info('Arrived to the loading position!')
             self.robot_state = State.GO_ATTACH_SHELF
+            self.control_timer.reset()
             
             
         elif result == TaskResult.CANCELED:
@@ -172,15 +176,31 @@ class SimpleCommander(Node):
 
         self.req.attach_to_shelf = True  # Initiate the robot movement towards the shelf
         self.future = self.cli.call_async(self.req)
-        self.future.add_done_callback(self.service_response_callback)
-
         self.sent_request = True 
         
+        while(not self.future.done()):
+            print("self.future is not done yet!!")
+            self.create_rate(0.5).sleep()
+
+        result = self.future.result()
+        if (result.complete):
+            self.get_logger().info("Successfully lifted the shelf!")
+            self.update_is_true = True  # Update the robot_footprint
+            self.robot_state = State.GO_SHIPPING # update the navigation state
+            self.control_timer.reset()
+            
+        else : 
+            self.get_logger().info("Could not load the shelf...")
+            exit(-1)
+
+        
         
 
-    def service_response_callback(self,future):
         
-        result = future.result()
+    # The function called when the service is done 
+    def service_response_callback(self):
+        print ("Inside the service_response_callback")
+        result = self.future.result()
         if (result.complete):
             self.get_logger().info("Successfully lifted the shelf!")
             self.update_is_true = True  # Update the robot_footprint
@@ -209,7 +229,7 @@ class SimpleCommander(Node):
         self.publisher_local.publish(self.robot_footprint)
         self.publisher_global.publish(self.robot_footprint)
 
-        self.get_logger().info("Updated the robot footprint")
+        #self.get_logger().info("Updated the robot footprint")
 
     # After lifting the shelf, back up the robot a little
     # sincs the new footprint is larger and overlaps with some of the warehouse detected obstacles
@@ -232,6 +252,7 @@ class SimpleCommander(Node):
         time.sleep(1.0)
 
         self.reverse = True
+        self.control_timer.reset()
 
     def unload_shelf(self):
         unload_msg = String()
@@ -281,6 +302,7 @@ class SimpleCommander(Node):
         elif result == TaskResult.FAILED:
             self.get_logger().info('Task failed!')
             exit(-1)
+        self.control_timer.reset()
 
     
 def main():
