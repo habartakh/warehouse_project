@@ -29,6 +29,14 @@ class ApproachShelfServer : public rclcpp::Node {
 public:
   ApproachShelfServer() : Node("service_stop") {
 
+    this->declare_parameter("cmd_vel_topic_name",
+                            "/diffbot_base_controller/cmd_vel_unstamped");
+    cmd_vel_topic_name = this->get_parameter("cmd_vel_topic_name")
+                             .get_parameter_value()
+                             .get<std::string>();
+
+    std::cout << "cmd_vel_topic_name : " << cmd_vel_topic_name << std::endl;
+
     srv_cbg =
         create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     srv_ = create_service<GoToLoading>(
@@ -45,8 +53,23 @@ public:
         "scan", 10, std::bind(&ApproachShelfServer::scan_callback, this, _1),
         options1);
 
+    // Adjust the shelf legs intensity threshold and the odom frame name based
+    // on whether the robot is in the simulated or real environment
+    if (cmd_vel_topic_name == "/cmd_vel") {
+      // real robot
+      std::cout << "Service server for real robot !! " << std::endl;
+      scan_intensity_thres = 4500;
+      odom_frame_name = "robot_odom";
+      distance_under_shelf = 0.3;
+    } else {
+      std::cout << "Service server for SIM robot !! " << std::endl;
+      scan_intensity_thres = 8000;
+      odom_frame_name = "odom";
+      distance_under_shelf = 0.45;
+    }
+
     publisher_ = this->create_publisher<geometry_msgs::msg::Twist>(
-        "diffbot_base_controller/cmd_vel_unstamped", 10);
+        cmd_vel_topic_name, 10);
 
     shelf_detection_cp = this->create_callback_group(
         rclcpp::CallbackGroupType::MutuallyExclusive);
@@ -90,11 +113,13 @@ private:
   rclcpp::CallbackGroup::SharedPtr scan_callback_group_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub;
   std::shared_ptr<tf2_ros::StaticTransformBroadcaster> tf_static_broadcaster_;
+  std::string odom_frame_name;
 
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_{nullptr};
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
 
   std::vector<int> shelf_laser_indexes;
+  int scan_intensity_thres;
   int leg_2_first_index;
   sensor_msgs::msg::LaserScan::SharedPtr laser_scan_msg;
   float angle_increment;
@@ -103,6 +128,9 @@ private:
   bool service_complete = false;
   bool reached_final_position = false;
   bool leg_detection_complete = false;
+  float distance_under_shelf;
+
+  std::string cmd_vel_topic_name;
 
   void service_callback(const std::shared_ptr<GoToLoading::Request> request,
                         const std::shared_ptr<GoToLoading::Response> response) {
@@ -164,11 +192,11 @@ private:
 
   void shelf_leg_detection() {
     if (laser_scan_msg != nullptr) {
-      // store all the indexes of the rays having intensities >= 8000
-      // that correspond to the shelf legs inside a vector
+      // store all the indexes of the rays having intensities >=
+      // scan_intensity_thres that correspond to the shelf legs inside a vector
       for (auto it = laser_scan_msg->intensities.begin();
            it != laser_scan_msg->intensities.end(); ++it) {
-        if (*it >= 8000) {
+        if (*it >= scan_intensity_thres) {
           int shelf_index = it - laser_scan_msg->intensities.begin();
           shelf_laser_indexes.push_back(shelf_index);
         }
@@ -229,7 +257,7 @@ private:
     geometry_msgs::msg::TransformStamped odom_to_laser_tf;
     try {
       odom_to_laser_tf = tf_buffer_->lookupTransform(
-          "odom", "robot_front_laser_base_link", tf2::TimePointZero);
+          odom_frame_name, "robot_front_laser_base_link", tf2::TimePointZero);
       tf2::doTransform(laser_pose, odom_pose, odom_to_laser_tf);
     }
 
@@ -240,7 +268,7 @@ private:
 
     geometry_msgs::msg::TransformStamped t;
     t.header.stamp = this->get_clock()->now();
-    t.header.frame_id = "odom";
+    t.header.frame_id = odom_frame_name;
     t.child_frame_id = "cart_frame";
     t.transform.translation.x = odom_pose.pose.position.x;
     t.transform.translation.y = odom_pose.pose.position.y;
@@ -313,12 +341,12 @@ private:
     geometry_msgs::msg::Twist cmd;
     cmd.linear.x = 0.15;
 
-    std::string odom_frame = "odom";
+    std::string odom_frame = odom_frame_name;
     std::string base_frame = "robot_base_footprint";
 
     geometry_msgs::msg::TransformStamped start_tf;
     try {
-      start_tf = tf_buffer_->lookupTransform(odom_frame, base_frame,
+      start_tf = tf_buffer_->lookupTransform(odom_frame_name, base_frame,
                                              tf2::TimePointZero);
     } catch (const tf2::TransformException &ex) {
       RCLCPP_WARN(this->get_logger(), "TF error: %s", ex.what());
@@ -336,7 +364,7 @@ private:
 
       geometry_msgs::msg::TransformStamped current_tf;
       try {
-        current_tf = tf_buffer_->lookupTransform(odom_frame, base_frame,
+        current_tf = tf_buffer_->lookupTransform(odom_frame_name, base_frame,
                                                  tf2::TimePointZero);
       } catch (const tf2::TransformException &ex) {
         RCLCPP_WARN(this->get_logger(), "TF error during move: %s", ex.what());
@@ -348,7 +376,7 @@ private:
       double dy = current_tf.transform.translation.y - start_y;
       double dist_moved = std::sqrt(dx * dx + dy * dy);
 
-      if (dist_moved >= 0.45) {
+      if (dist_moved >= distance_under_shelf) {
         break;
       }
     }

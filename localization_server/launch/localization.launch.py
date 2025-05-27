@@ -37,6 +37,11 @@ def generate_launch_description():
             '"', "True", '" if "', map_file_f, '" == "warehouse_map_keepout_sim.yaml" else "', "False", '"'
         ])
 
+    cmd_vel_topic = PythonExpression([
+            '"', "/diffbot_base_controller/cmd_vel_unstamped", '" if "',
+             map_file_f, '" == "warehouse_map_keepout_sim.yaml" else "', "/cmd_vel", '"'
+        ])
+
     # RVIZ Configuration
     rviz_config_dir = os.path.join(get_package_share_directory(package_description), 'rviz', 'amcl_rviz.rviz')
 
@@ -78,10 +83,12 @@ def generate_launch_description():
 
     # Start the service server to make the robot go under the shelf and attach it 
     service_server_pkg = get_package_share_directory('approach_cart_service_server')
+    
     approach_cart_service_server_node = IncludeLaunchDescription(
                         PythonLaunchDescriptionSource(
                             os.path.join(service_server_pkg, 'launch', 'start_approach_service_server.launch.py'),
-                        )
+                        ),
+                        launch_arguments={'cmd_vel_topic_name': cmd_vel_topic}.items() 
                     )
 
 
