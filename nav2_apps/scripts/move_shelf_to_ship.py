@@ -86,11 +86,9 @@ class SimpleCommander(Node):
                 self.go_to_loading_position()
 
             case State.GO_ATTACH_SHELF:
-                # only send ONE request 
-                #if self.sent_request == False :  
-                    # After placing the robot in the loading position,
-                    # Move it under the shelf and lift the shelf,
-                    # Then update the robot footprint
+                # After placing the robot in the loading position,
+                # Move it under the shelf and lift the shelf,
+                # Then update the robot footprint
                 self.go_under_shelf()
                 
             case State.GO_SHIPPING : 
@@ -107,7 +105,14 @@ class SimpleCommander(Node):
                  
                 # Go back to your initial position
                 self.navigator.goToPose(self.initial_pose)
-                # print("Finished the mission!") 
+                while not self.navigator.isTaskComplete():
+                    pass
+                
+                result = self.navigator.getResult()
+                if result == TaskResult.SUCCEEDED:
+                    self.get_logger().info("Mission accomplished!")
+                else:
+                    self.get_logger().info("Could not return to the initial position...")
 
             case _ : 
                print ("Default case") 
@@ -173,7 +178,7 @@ class SimpleCommander(Node):
     #  we will call a service made in a previous project:
     # https://github.com/habartakh/checkpoint9/blob/main/attach_shelf/src/approach_service_server.cpp
     def go_under_shelf(self):
-        print('Inside go_under_shelf function')
+        self.get_logger().info('Going under the shelf...')
         while not self.cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Service not available, waiting...')
 
@@ -182,7 +187,7 @@ class SimpleCommander(Node):
         self.sent_request = True 
         
         while(not self.future.done()):
-            print("self.future is not done yet!!")
+            # print("self.future is not done yet!!")
             self.create_rate(0.5).sleep()
 
         result = self.future.result()
@@ -197,8 +202,6 @@ class SimpleCommander(Node):
             exit(-1)
 
         
-        
-
         
     # The function called when the service is done 
     def service_response_callback(self):
@@ -232,8 +235,7 @@ class SimpleCommander(Node):
         self.publisher_local.publish(self.robot_footprint)
         self.publisher_global.publish(self.robot_footprint)
 
-        #self.get_logger().info("Updated the robot footprint")
-
+       
     # After lifting the shelf, back up the robot a little
     # sincs the new footprint is larger and overlaps with some of the warehouse detected obstacles
     # Thus, the navigation system won't be able to plan a suitable path to the shipping position
@@ -242,7 +244,7 @@ class SimpleCommander(Node):
         cmd_vel_msg.angular.z = 0.0 
         cmd_vel_msg.linear.x = -0.2 
 
-        self.get_logger().info('Sending move command for 2 seconds...')
+        self.get_logger().info('Going backwards...')
         
         for _ in range(80):
             self.vel_cmd_publisher.publish(cmd_vel_msg)
@@ -250,13 +252,12 @@ class SimpleCommander(Node):
 
         cmd_vel_msg.linear.x = 0.0       
         
-        self.get_logger().info('Sending stop command ...')
+        self.get_logger().info('Stopping ...')
         self.vel_cmd_publisher.publish(cmd_vel_msg)
         time.sleep(1.0)
 
         self.reverse = True
 
-        # self.control_timer.reset()
 
     def unload_shelf(self):
         unload_msg = String()
